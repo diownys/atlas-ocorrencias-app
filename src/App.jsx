@@ -12,13 +12,13 @@ import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 
 // Cole as suas chaves do Firebase aqui
 const firebaseConfig = {
-    apiKey: "AIzaSyBUzXY10g8fPPJ2OxekvSKnmJ7Hl660szQ",
-    authDomain: "atlas-ocorrencias.firebaseapp.com",
-    projectId: "atlas-ocorrencias",
-    storageBucket: "atlas-ocorrencias.appspot.com",
-    messagingSenderId: "245745193492",
-    appId: "1:245745193492:web:d87dbf8bac275dd51a4d01",
-    measurementId: "G-9MNM4ZVPMS"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
