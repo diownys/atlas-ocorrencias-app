@@ -557,7 +557,66 @@ const StatusPieChart = ({ occurrences, formOptions }) => {
         </div>
     );
 };
+const OriginAreaPieChart = ({ occurrences, formOptions }) => {
+    const processData = () => {
+        const areaCounts = {};
+        formOptions.originAreas.forEach(area => areaCounts[area] = 0);
+        
+        occurrences.forEach(occ => {
+            if (areaCounts.hasOwnProperty(occ.originArea)) {
+                areaCounts[occ.originArea]++;
+            }
+        });
 
+        // Gerar cores dinamicamente para cada área de origem
+        const colors = ['#60a5fa', '#f87171', '#34d399', '#facc15', '#a78bfa', '#fb923c', '#d8b4fe'];
+        let colorIndex = 0;
+
+        return Object.keys(areaCounts).map(area => {
+            const color = colors[colorIndex % colors.length];
+            colorIndex++;
+            return { name: area, value: areaCounts[area], color };
+        });
+    };
+
+    const data = processData();
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    let accumulatedPercentage = 0;
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="font-bold text-lg text-gray-800 mb-4">Ocorrências por Área de Origem</h3>
+            <div className="flex items-center justify-around">
+                <div className="relative w-40 h-40">
+                    <svg viewBox="0 0 36 36" className="transform -rotate-90">
+                        {data.map((item) => {
+                            const percentage = total > 0 ? (item.value / total) * 100 : 0;
+                            const strokeDasharray = `${percentage} ${100 - percentage}`;
+                            const strokeDashoffset = -accumulatedPercentage;
+                            accumulatedPercentage += percentage;
+                            return (
+                                <circle key={item.name} cx="18" cy="18" r="15.9155" fill="transparent" stroke={item.color} strokeWidth="3.8" strokeDasharray={strokeDasharray} strokeDashoffset={strokeDashoffset} title={`${item.name}: ${item.value}`} />
+                            );
+                        })}
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold text-gray-800">{total}</span>
+                        <span className="text-xs text-gray-500 mt-1">Total</span>
+                    </div>
+                </div>
+                <ul className="space-y-2 text-sm">
+                    {data.map((item) => (
+                        <li key={item.name} className="flex items-center">
+                            <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: item.color }}></span>
+                            <span className="text-gray-700">{item.name}</span>
+                            <span className="ml-auto font-medium text-gray-500">{total > 0 ? `${Math.round((item.value / total) * 100)}%` : '0%'}</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+    );
+};
 const DashboardPage = ({ occurrences, formOptions }) => {
     const getOccurrencesLast6Months = () => {
         const today = new Date();
@@ -585,6 +644,9 @@ const DashboardPage = ({ occurrences, formOptions }) => {
             <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <OccurrencesBarChart occurrences={occurrencesLast6Months} />
                 <StatusPieChart occurrences={occurrencesLast6Months} formOptions={formOptions} />
+            </div>
+                <div className="mt-6">
+                <OriginAreaPieChart occurrences={occurrencesLast6Months} formOptions={formOptions} />
             </div>
         </div>
     );
