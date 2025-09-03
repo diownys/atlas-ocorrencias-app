@@ -10,7 +10,6 @@ import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs } from "firebase/firestore";
 
-// Cole as suas chaves do Firebase aqui
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -134,14 +133,17 @@ const OccurrenceModal = ({ isOpen, onClose, onSave, editingData, formOptions }) 
             salesperson: 'N/D', 
             immediateAction: '', 
             actionDescription: '', 
-            status: 'Aberta' 
+            status: 'Aberta',
+            externa: false 
         };
     };
     
     const [formData, setFormData] = useState(getInitialState);
 
     useEffect(() => {
-        const initialState = getInitialState();
+        const initialState = isEditMode
+            ? { ...editingData, externa: editingData.externa ?? false }
+            : getInitialState();
         setFormData(initialState);
         if (isEditMode) {
             setIsSaleIdEnabled(initialState.saleId !== 'N/D');
@@ -162,7 +164,13 @@ const OccurrenceModal = ({ isOpen, onClose, onSave, editingData, formOptions }) 
         setFormData(prev => ({ ...prev, salesperson: enabled ? (formOptions.salespeople[0] || '') : 'N/D' }));
     };
 
-    const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
     
     const handleSelectChange = (name, value) => {
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -182,6 +190,23 @@ const OccurrenceModal = ({ isOpen, onClose, onSave, editingData, formOptions }) 
                 <form onSubmit={handleSubmit} className="overflow-y-auto">
                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InputField label="Data" name="date" type="date" value={formData.date} onChange={handleChange} required />
+                        
+                        {/* --- CHECKBOX ADICIONADO AQUI --- */}
+                        <div className="flex items-center justify-start md:pt-6">
+                            <input
+                                type="checkbox"
+                                id="externa"
+                                name="externa"
+                                checked={formData.externa}
+                                onChange={handleChange}
+                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="externa" className="ml-3 text-sm font-medium text-gray-700">
+                                Marcar como ocorrência externa
+                            </label>
+                        </div>
+                        {/* --------------------------------- */}
+
                         <div>
                             <div className="flex items-center justify-between mb-1">
                                 <label htmlFor="saleId" className="block text-sm font-medium text-gray-700">Número da Venda</label>
@@ -324,7 +349,6 @@ const Pagination = ({ itemsPerPage, totalItems, currentPage, onPageChange }) => 
     );
 }
 
-// --- PAGE COMPONENTS ---
 
 const LoadingScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
@@ -423,7 +447,7 @@ const LoginPage = ({ auth }) => {
             <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
                 <div className="text-center">
                     <div className="flex items-center justify-center mb-2">
-                      <img src={logoUrl} alt="Atlas S.A Logo" className="h-10" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/128x40/1e293b/ffffff?text=Atlas+S.A'; }} />
+                        <img src={logoUrl} alt="Atlas S.A Logo" className="h-10" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/128x40/1e293b/ffffff?text=Atlas+S.A'; }} />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-800">Atlas S.A</h1>
                     <p className="text-gray-500 mt-2">Faça login para continuar</p>
@@ -568,7 +592,6 @@ const OriginAreaPieChart = ({ occurrences, formOptions }) => {
             }
         });
 
-        // Gerar cores dinamicamente para cada área de origem
         const colors = ['#60a5fa', '#f87171', '#34d399', '#facc15', '#a78bfa', '#fb923c', '#d8b4fe'];
         let colorIndex = 0;
 
@@ -645,7 +668,7 @@ const DashboardPage = ({ occurrences, formOptions }) => {
                 <OccurrencesBarChart occurrences={occurrencesLast6Months} />
                 <StatusPieChart occurrences={occurrencesLast6Months} formOptions={formOptions} />
             </div>
-                <div className="mt-6">
+               <div className="mt-6">
                 <OriginAreaPieChart occurrences={occurrencesLast6Months} formOptions={formOptions} />
             </div>
         </div>
@@ -684,6 +707,7 @@ const OccurrencesPage = ({ occurrences, onOpenNewModal, onOpenEditModal, onDelet
             'Descrição': occ.description,
             'Categoria': occ.category,
             'Status': occ.status,
+            'Tipo': occ.externa ? 'Externa' : 'Interna',
             'Área de Detecção': occ.detectionArea,
             'Área de Origem': occ.originArea,
             'Vendedor': occ.salesperson,
@@ -729,7 +753,15 @@ const OccurrencesPage = ({ occurrences, onOpenNewModal, onOpenEditModal, onDelet
                             <tr><th scope="col" className="px-6 py-3"></th><th scope="col" className="px-6 py-3">Data</th><th scope="col" className="px-6 py-3">Nº Venda</th><th scope="col" className="px-6 py-3">Descrição</th><th scope="col" className="px-6 py-3">Categoria</th><th scope="col" className="px-6 py-3">Status</th><th scope="col" className="px-6 py-3">Ações</th></tr>
                         </thead>
                         <tbody>
-                            {currentItems.map(item => (<React.Fragment key={item.id}><tr className="bg-white border-b hover:bg-gray-50"><td className="px-6 py-4 cursor-pointer" onClick={() => setOpenRow(openRow === item.id ? null : item.id)}><ChevronDown className={`transition-transform ${openRow === item.id ? 'rotate-180' : ''}`} size={16} /></td><td className="px-6 py-4">{new Date(item.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td className="px-6 py-4 font-mono">{item.saleId}</td><td className="px-6 py-4 font-medium text-gray-900 truncate" style={{maxWidth: '200px'}}>{item.description}</td><td className="px-6 py-4">{item.category}</td><td className="px-6 py-4"><span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${getStatusClass(item.status)}`}>{item.status}</span></td><td className="px-6 py-4 flex items-center space-x-1"><button onClick={() => onOpenEditModal(item)} className="p-2 text-blue-600 hover:text-blue-800 transition-colors"><Pencil size={16} /></button><button onClick={() => onDeleteClick(item)} className="p-2 text-red-600 hover:text-red-800 transition-colors"><Trash2 size={16} /></button></td></tr>{openRow === item.id && (<tr className="bg-gray-50"><td colSpan="7" className="p-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-white rounded-md"><div><h4 className="font-bold text-gray-600">Vendedor:</h4><p className="text-gray-500">{item.salesperson}</p></div><div><h4 className="font-bold text-gray-600">Área de Detecção:</h4><p className="text-gray-500">{item.detectionArea}</p></div><div><h4 className="font-bold text-gray-600">Área de Origem:</h4><p className="text-gray-500">{item.originArea}</p></div><div className="col-span-full"><h4 className="font-bold text-gray-600">Ação Imediata:</h4><p className="text-gray-500">{item.immediateAction}</p></div><div className="col-span-full"><h4 className="font-bold text-gray-600">Descrição da Ação Corretiva:</h4><p className="text-gray-500">{item.actionDescription}</p></div></div></td></tr>)}</React.Fragment>))}
+                            {currentItems.map(item => (<React.Fragment key={item.id}><tr className="bg-white border-b hover:bg-gray-50"><td className="px-6 py-4 cursor-pointer" onClick={() => setOpenRow(openRow === item.id ? null : item.id)}><ChevronDown className={`transition-transform ${openRow === item.id ? 'rotate-180' : ''}`} size={16} /></td><td className="px-6 py-4">{new Date(item.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td className="px-6 py-4 font-mono">{item.saleId}</td><td className="px-6 py-4 font-medium text-gray-900 truncate" style={{maxWidth: '200px'}}>{item.description}</td><td className="px-6 py-4">{item.category}</td><td className="px-6 py-4"><span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${getStatusClass(item.status)}`}>{item.status}</span>
+                            {/* --- INDICADOR VISUAL ADICIONADO AQUI --- */}
+                            {item.externa && (
+                                <span className="ml-2 px-2 py-1 font-semibold leading-tight rounded-full text-xs bg-purple-100 text-purple-800">
+                                    Externa
+                                </span>
+                            )}
+                            {/* ----------------------------------------- */}
+                            </td><td className="px-6 py-4 flex items-center space-x-1"><button onClick={() => onOpenEditModal(item)} className="p-2 text-blue-600 hover:text-blue-800 transition-colors"><Pencil size={16} /></button><button onClick={() => onDeleteClick(item)} className="p-2 text-red-600 hover:text-red-800 transition-colors"><Trash2 size={16} /></button></td></tr>{openRow === item.id && (<tr className="bg-gray-50"><td colSpan="7" className="p-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-white rounded-md"><div><h4 className="font-bold text-gray-600">Vendedor:</h4><p className="text-gray-500">{item.salesperson}</p></div><div><h4 className="font-bold text-gray-600">Área de Detecção:</h4><p className="text-gray-500">{item.detectionArea}</p></div><div><h4 className="font-bold text-gray-600">Área de Origem:</h4><p className="text-gray-500">{item.originArea}</p></div><div className="col-span-full"><h4 className="font-bold text-gray-600">Ação Imediata:</h4><p className="text-gray-500">{item.immediateAction}</p></div><div className="col-span-full"><h4 className="font-bold text-gray-600">Descrição da Ação Corretiva:</h4><p className="text-gray-500">{item.actionDescription}</p></div></div></td></tr>)}</React.Fragment>))}
                         </tbody>
                     </table>
                 </div>
@@ -951,7 +983,6 @@ const ChatWidget = ({ currentUser }) => {
     );
 };
 
-// --- APP PRINCIPAL ---
 export default function App() {
   const [authIsLoading, setAuthIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
