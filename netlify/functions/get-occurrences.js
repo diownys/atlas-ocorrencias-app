@@ -2,6 +2,7 @@
 const admin = require('firebase-admin');
 
 // Inicializa a aplicação Firebase Admin, se ainda não foi inicializada.
+// Ele lê as credenciais automaticamente das variáveis de ambiente da Netlify.
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -16,66 +17,31 @@ const db = admin.firestore();
 
 // A função principal que será executada pela Netlify
 exports.handler = async (event, context) => {
-  // 1. Verificação de Segurança (Chave de API)
-  const providedApiKey = event.headers['x-api-key'];
-  if (providedApiKey !== process.env.API_SECRET_KEY) {
-    return {
-      statusCode: 401, // Unauthorized
-      body: JSON.stringify({ error: 'Acesso não autorizado. Chave de API inválida.' }),
-    };
+  // Verificação de Segurança (Chave de API)
+  if (event.headers['x-api-key'] !== process.env.API_SECRET_KEY) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Acesso não autorizado.' }) };
   }
 
-  // 2. Apenas permitir pedidos do tipo POST
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405, // Method Not Allowed
-      body: JSON.stringify({ error: 'Método não permitido. Utilize POST.' }),
-    };
+  // Apenas permitir pedidos do tipo GET
+  if (event.httpMethod !== 'GET') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Método não permitido.' }) };
   }
 
   try {
-    // 3. Obter os dados enviados pelo script
-    const data = JSON.parse(event.body);
+    const occurrencesRef = db.collection('occurrences');
+    const snapshot = await occurrencesRef.get();
+    const occurrences = [];
+    snapshot.forEach(doc => {
+      occurrences.push({ id: doc.id, ...doc.data() });
+    });
 
-    // Validação mínima: verificar se a descrição foi enviada
-    if (!data.description) {
-      return {
-        statusCode: 400, // Bad Request
-        body: JSON.stringify({ error: 'O campo "description" é obrigatório.' }),
-      };
-    }
-
-    // 4. Montar o objeto da nova ocorrência com valores padrão
-    const newOccurrence = {
-      date: new Date().toISOString().split('T')[0],
-      saleId: data.saleId || 'N/D',
-      description: data.description,
-      category: data.category || 'SLA', // Categoria padrão "SLA"
-      status: 'Aberta',
-      externa: data.externa || false, // Por padrão, será interna
-      detectionArea: 'Sistema Automático',
-      originArea: 'Expedição',
-      salesperson: 'N/D',
-      immediateAction: 'Registo automático por violação de SLA.',
-      actionDescription: '',
-    };
-
-    // 5. Adicionar o novo documento ao Firestore
-    const docRef = await db.collection('occurrences').add(newOccurrence);
-
-    // 6. Enviar resposta de sucesso
     return {
-      statusCode: 201, // Created
+      statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, id: docRef.id, data: newOccurrence }),
+      body: JSON.stringify(occurrences),
     };
-
   } catch (error) {
-    console.error('Erro ao criar ocorrência:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Ocorreu um erro interno no servidor.' }),
-    };
+    console.error('Erro ao buscar ocorrências:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Erro interno no servidor.' }) };
   }
 };
-

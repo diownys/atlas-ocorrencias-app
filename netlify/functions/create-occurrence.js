@@ -2,6 +2,7 @@
 const admin = require('firebase-admin');
 
 // Inicializa a aplicação Firebase Admin, se ainda não foi inicializada.
+// Ele lê as credenciais automaticamente das variáveis de ambiente da Netlify.
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -16,59 +17,45 @@ const db = admin.firestore();
 
 // A função principal que será executada pela Netlify
 exports.handler = async (event, context) => {
-  // 1. Verificação de Segurança (Chave de API)
-  const providedApiKey = event.headers['x-api-key'];
-  if (providedApiKey !== process.env.API_SECRET_KEY) {
-    return {
-      statusCode: 401, // Unauthorized
-      body: JSON.stringify({ error: 'Acesso não autorizado. Chave de API inválida.' }),
-    };
+  // Verificação de Segurança (Chave de API)
+  if (event.headers['x-api-key'] !== process.env.API_SECRET_KEY) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Acesso não autorizado.' }) };
   }
 
-  // 2. Apenas permitir pedidos do tipo GET
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405, // Method Not Allowed
-      body: JSON.stringify({ error: 'Método não permitido.' }),
-    };
+  // Apenas permitir pedidos do tipo POST
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Método não permitido. Utilize POST.' }) };
   }
 
   try {
-    // 3. Buscar os dados no Firestore
-    const occurrencesRef = db.collection('occurrences');
-    const snapshot = await occurrencesRef.get();
-
-    if (snapshot.empty) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify([]), // Retorna uma lista vazia se não houver ocorrências
-      };
+    const data = JSON.parse(event.body);
+    if (!data.description) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'O campo "description" é obrigatório.' }) };
     }
 
-    // 4. Formatar os dados para enviar como resposta
-    const occurrences = [];
-    snapshot.forEach(doc => {
-      occurrences.push({
-        id: doc.id,
-        ...doc.data(),
-      });
-    });
+    const newOccurrence = {
+      date: new Date().toISOString().split('T')[0],
+      saleId: data.saleId || 'N/D',
+      description: data.description,
+      category: data.category || 'SLA',
+      status: 'Aberta',
+      externa: data.externa || false,
+      detectionArea: 'Sistema Automático',
+      originArea: 'Expedição',
+      salesperson: 'N/D',
+      immediateAction: 'Registo automático por violação de SLA.',
+      actionDescription: '',
+    };
 
-    // 5. Enviar a resposta com sucesso
+    const docRef = await db.collection('occurrences').add(newOccurrence);
+
     return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(occurrences),
+      statusCode: 201,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: true, id: docRef.id }),
     };
   } catch (error) {
-    // 6. Tratar possíveis erros
-    console.error('Erro ao buscar ocorrências:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Ocorreu um erro interno no servidor.' }),
-    };
+    console.error('Erro ao criar ocorrência:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Erro interno no servidor.' }) };
   }
 };
-
