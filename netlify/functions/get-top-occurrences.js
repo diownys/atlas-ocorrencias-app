@@ -77,13 +77,15 @@ exports.handler = async (event, context) => {
     const counts = { internas: {}, externas: {} };
     allOccurrences.forEach((occ) => {
       // =======================================================
-      //          CORREÇÃO APLICADA AQUI
-      // Trocamos 'occ.title' por 'occ.actionDescription'
-      // para bater com os nomes dos campos do seu banco.
+      //          LÓGICA FINAL E CORRETA
+      // Verificamos o campo booleano 'externa'.
+      // Se occ.externa for true, é 'externas'.
+      // Se for false ou se o campo não existir (undefined),
+      // será 'internas', exatamente como você descreveu.
       // =======================================================
-      if (occ.actionDescription && occ.type) {
-        const category = categorizeOccurrence(occ.actionDescription); // <-- MUDANÇA AQUI
-        const type = occ.type === "interna" ? "internas" : "externas";
+      if (occ.actionDescription) { // Só precisamos que a descrição exista
+        const category = categorizeOccurrence(occ.actionDescription);
+        const type = occ.externa === true ? "externas" : "internas";
         counts[type][category] = (counts[type][category] || 0) + 1;
       }
     });
@@ -114,3 +116,4 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
