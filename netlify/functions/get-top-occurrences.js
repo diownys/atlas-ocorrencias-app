@@ -2,7 +2,7 @@
 const admin = require("firebase-admin");
 
 // ===================================================================
-//        CÉREBRO DE CATEGORIAS (BASEADO NA NOSSA ANÁLISE)
+//        CÉREBRO DE CATEGORIAS
 // ===================================================================
 const categories = {
   "Erro de Endereço": ["endereço", "incorreto", "incorreta", "endereco errado"],
@@ -30,15 +30,9 @@ const categories = {
   ],
 };
 
-/**
- * Categoriza uma ocorrência baseada na sua descrição.
- * @param {string} description A descrição da ocorrência.
- * @return {string} A categoria encontrada ou 'Outros'.
- */
 function categorizeOccurrence(description) {
   const lowerCaseDescription = description.toLowerCase();
   for (const category in categories) {
-    // Usar hasOwnProperty para segurança em loops for...in
     if (Object.prototype.hasOwnProperty.call(categories, category)) {
       for (const keyword of categories[category]) {
         if (lowerCaseDescription.includes(keyword)) {
@@ -49,10 +43,8 @@ function categorizeOccurrence(description) {
   }
   return "Outros";
 }
-// ===================================================================
 
-// Inicializa a aplicação Firebase Admin usando as credenciais do ambiente Netlify
-// Isso garante que o código só é inicializado uma vez
+// Inicializa a aplicação Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -65,9 +57,8 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// A função principal que será executada pela Netlify
+// A função principal da Netlify
 exports.handler = async (event, context) => {
-  // Apenas permitir pedidos do tipo GET para segurança
   if (event.httpMethod !== "GET") {
     return {
       statusCode: 405,
@@ -76,7 +67,6 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // 1. BUSCAR TODAS AS OCORRÊNCIAS (como sua função já fazia)
     const occurrencesRef = db.collection("occurrences");
     const snapshot = await occurrencesRef.get();
     const allOccurrences = [];
@@ -84,17 +74,20 @@ exports.handler = async (event, context) => {
       allOccurrences.push({ id: doc.id, ...doc.data() });
     });
 
-    // 2. PROCESSAR E CONTAR AS OCORRÊNCIAS
     const counts = { internas: {}, externas: {} };
     allOccurrences.forEach((occ) => {
-      if (occ.title && occ.type) {
-        const category = categorizeOccurrence(occ.title);
+      // =======================================================
+      //          CORREÇÃO APLICADA AQUI
+      // Trocamos 'occ.title' por 'occ.actionDescription'
+      // para bater com os nomes dos campos do seu banco.
+      // =======================================================
+      if (occ.actionDescription && occ.type) {
+        const category = categorizeOccurrence(occ.actionDescription); // <-- MUDANÇA AQUI
         const type = occ.type === "interna" ? "internas" : "externas";
         counts[type][category] = (counts[type][category] || 0) + 1;
       }
     });
 
-    // 3. CALCULAR O TOP 3
     const getTop3 = (countObject) => {
       return Object.entries(countObject)
         .map(([title, count]) => ({ title, count }))
@@ -105,12 +98,11 @@ exports.handler = async (event, context) => {
     const top3Internas = getTop3(counts.internas);
     const top3Externas = getTop3(counts.externas);
 
-    // 4. RETORNAR O RESULTADO FINAL
     return {
       statusCode: 200,
       headers: { 
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*" // Permite o acesso de outros domínios
+        "Access-Control-Allow-Origin": "*"
       },
       body: JSON.stringify({ internas: top3Internas, externas: top3Externas }),
     };
