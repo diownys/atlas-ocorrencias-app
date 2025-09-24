@@ -1,0 +1,9 @@
+# Configuração de Cabeçalhos Globais para o Netlify
+
+# Esta regra se aplica a todas as páginas e funções do seu site (*)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Esta é a linha mágica. Ela diz aos navegadores:
+    # "Qualquer site, de qualquer origem (*), tem permissão para buscar dados daqui."
+    Access-Control-Allow-Origin = "*"
