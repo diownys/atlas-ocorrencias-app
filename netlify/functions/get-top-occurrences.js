@@ -1,20 +1,16 @@
 // netlify/functions/get-top-occurrences.js
 
-// Importa o SDK de Admin do Firebase
+// 1) Firebase Admin
 const admin = require('firebase-admin');
 
-/* ==========================================================================
-   CORS – lista branca de origens permitidas
-   Ajuste conforme seus domínios reais (produção e dev)
-   ========================================================================== */
+// 2) CORS (lista branca) — ajuste conforme seus domínios
 const ALLOWED_ORIGINS = new Set([
   'https://sistema-envios-nuvem.pages.dev', // Cloudflare Pages (prod)
-  'http://localhost:5173',                  // Vite (dev)
-  'http://localhost:3000',                  // Outra porta comum (dev)
+  'http://localhost:5173',
+  'http://localhost:3000',
 ]);
 
 function makeCorsHeaders(origin) {
-  // Se quiser liberar geral, troque para: const allowOrigin = '*';
   const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : 'https://sistema-envios-nuvem.pages.dev';
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -22,35 +18,31 @@ function makeCorsHeaders(origin) {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store', // evita cache de função
   };
 }
 
-/* ==========================================================================
-   "CÉREBRO" de categorias
-   ========================================================================== */
+// 3) Categorias
 const categories = {
   'Erro de Endereço': ['endereço', 'incorreto', 'incorreta', 'endereco errado'],
   'Falha de Transporte/Logística': [
-    'transportadora', 'expedição', 'envio',
-    'coleta', 'entregue', 'chegou', 'extravio', 'extraviado',
+    'transportadora', 'expedição', 'envio', 'coleta',
+    'entregue', 'chegou', 'extravio', 'extraviado',
   ],
   'Falha de Processo (Janela/Horário)': [
     'janela', 'horário', 'atraso na emissão', 'fora do horario',
   ],
   'Problema Técnico Interno': [
-    'conexão', 'internet', 'imprimir',
-    'sistema', 'impressora', 'não consigo acessar', 'erp',
+    'conexão', 'internet', 'imprimir', 'sistema', 'impressora', 'não consigo acessar', 'erp',
   ],
   'Irregularidade Fiscal/Documental': [
-    'receita', 'contrato', 'irregularidade',
-    'sefaz', 'retido', 'nota fiscal', 'nf',
+    'receita', 'contrato', 'irregularidade', 'sefaz', 'retido', 'nota fiscal', 'nf',
   ],
   'Avaria ou Problema no Produto': [
     'avaria', 'danificado', 'quebrado', 'medicamento', 'laboratório',
   ],
   'Erro de Separação/Conferência': [
-    'conferência', 'separado errado',
-    'item errado', 'item faltante', 'trocado',
+    'conferência', 'separado errado', 'item errado', 'item faltante', 'trocado',
   ],
 };
 
@@ -64,60 +56,81 @@ function categorizeOccurrence(description = '') {
   return 'Outros';
 }
 
-/* ==========================================================================
-   Firebase Admin – inicialização
-   ========================================================================== */
-if (!admin.apps.length) {
-  const projectId   = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey    = process.env.FIREBASE_PRIVATE_KEY || '';
+// 4) Inicialização do Admin SDK (com guards)
+(function initFirebase() {
+  try {
+    if (!admin.apps.length) {
+      const projectId   = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      let privateKey    = process.env.FIREBASE_PRIVATE_KEY;
 
-  // Netlify costuma armazenar com \n escapado
-  privateKey = privateKey.replace(/\\n/g, '\n');
+      if (!projectId || !clientEmail || !privateKey) {
+        console.error('[FIREBASE_ENV] Variáveis ausentes:', {
+          hasProjectId: !!projectId,
+          hasClientEmail: !!clientEmail,
+          hasPrivateKey: !!privateKey,
+        });
+        throw new Error('Variáveis do Firebase ausentes (verifique as ENV no Netlify).');
+      }
 
-  admin.initializeApp({
-    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-  });
-}
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
+      admin.initializeApp({
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+      });
+      console.log('[FIREBASE] Admin inicializado com sucesso');
+    }
+  } catch (e) {
+    console.error('[FIREBASE_INIT_ERROR]', e);
+  }
+})();
 
 const db = admin.firestore();
 
-/* ==========================================================================
-   Handler principal (Netlify)
-   ========================================================================== */
-exports.handler = async (event /*, context */) => {
+// 5) Handler da função
+exports.handler = async (event) => {
   const origin = event.headers?.origin || '';
-  const cors = makeCorsHeaders(origin);
+  const headers = makeCorsHeaders(origin);
 
-  // 1) Pré-flight CORS
+  // Pré-flight
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: cors, body: '' };
+    return { statusCode: 204, headers, body: '' };
   }
 
-  // 2) Apenas GET é permitido
   if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers: cors,
-      body: JSON.stringify({ error: 'Método não permitido.' }),
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido.' }) };
   }
 
   try {
-    // 3) Coleta todas as ocorrências (pense em filtrar por data para performance)
-    const snapshot = await db.collection('occurrences').get();
-    const all = [];
-    snapshot.forEach((doc) => all.push({ id: doc.id, ...doc.data() }));
-
-    // 4) Conta por categoria e tipo (internas/externas via booleano 'externa')
-    const counts = { internas: {}, externas: {} };
-    for (const occ of all) {
-      if (!occ.actionDescription) continue;
-
-      const category = categorizeOccurrence(occ.actionDescription);
-      const type = occ.externa === true ? 'externas' : 'internas';
-      counts[type][category] = (counts[type][category] || 0) + 1;
+    // 🔎 Diagnóstico rápido das ENV em runtime
+    if (!admin.apps.length) {
+      throw new Error('Firebase Admin não inicializado. Cheque FIREBASE_* nas ENV.');
     }
+
+    // ⚡️ PERF: evite buscar tudo. Se tiver timestamp, filtre/limite:
+    // Exemplo: últimos 90 dias (ajuste o campo conforme seu schema: createdAt/created_at)
+    // const since = Date.now() - 1000 * 60 * 60 * 24 * 90;
+    // const snapshot = await db.collection('occurrences')
+    //   .where('createdAt', '>=', new Date(since)) // ou 'created_at'
+    //   .orderBy('createdAt', 'desc')
+    //   .limit(2000)
+    //   .get();
+
+    const snapshot = await db.collection('occurrences').get();
+
+    console.log('[OCC] Total docs:', snapshot.size);
+
+    const counts = { internas: {}, externas: {} };
+
+    snapshot.forEach((doc) => {
+      const data = doc.data() || {};
+      const desc = data.actionDescription;
+      if (!desc) return;
+
+      const category = categorizeOccurrence(desc);
+      const type = data.externa === true ? 'externas' : 'internas';
+      counts[type][category] = (counts[type][category] || 0) + 1;
+    });
 
     const toTop3 = (obj) =>
       Object.entries(obj)
@@ -130,13 +143,16 @@ exports.handler = async (event /*, context */) => {
       externas: toTop3(counts.externas),
     };
 
-    return { statusCode: 200, headers: cors, body: JSON.stringify(payload) };
+    console.log('[OCC] Top3 internas:', payload.internas);
+    console.log('[OCC] Top3 externas:', payload.externas);
+
+    return { statusCode: 200, headers, body: JSON.stringify(payload) };
   } catch (error) {
-    console.error('Erro ao processar ocorrências:', error);
+    console.error('[OCC_ERROR]', error?.message || error);
     return {
       statusCode: 500,
-      headers: cors,
-      body: JSON.stringify({ error: 'Erro interno no servidor.' }),
+      headers,
+      body: JSON.stringify({ error: 'Erro interno no servidor.' }), // evite expor detalhes sensíveis
     };
   }
 };
