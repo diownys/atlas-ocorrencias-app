@@ -1,7 +1,9 @@
+# Configuração de Cabeçalhos Globais para o Netlify
+
+# Esta regra se aplica a todas as páginas e funções do seu site (*)
 [[headers]]
-  for = "/.netlify/functions/get-top-occurrences"
+  for = "/*"
   [headers.values]
-    Access-Control-Allow-Origin = "https://sistema-envios-nuvem.pages.dev"
-    Access-Control-Allow-Methods = "GET, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization"
-    Access-Control-Max-Age = "86400"
+    # Esta é a linha mágica. Ela diz aos navegadores:
+    # "Qualquer site, de qualquer origem (*), tem permissão para buscar dados daqui."
+    Access-Control-Allow-Origin = "*"
