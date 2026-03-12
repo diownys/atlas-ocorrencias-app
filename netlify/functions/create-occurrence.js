@@ -1,8 +1,5 @@
-// Importa o SDK de Admin do Firebase
 const admin = require('firebase-admin');
 
-// Inicializa a aplicação Firebase Admin, se ainda não foi inicializada.
-// Ele lê as credenciais automaticamente das variáveis de ambiente da Netlify.
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -15,36 +12,40 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// A função principal que será executada pela Netlify
 exports.handler = async (event, context) => {
-  // Verificação de Segurança (Chave de API)
   if (event.headers['x-api-key'] !== process.env.API_SECRET_KEY) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Acesso não autorizado.' }) };
   }
 
-  // Apenas permitir pedidos do tipo POST
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Método não permitido. Utilize POST.' }) };
   }
 
   try {
     const data = JSON.parse(event.body);
+
+    // Validação básica: a descrição ainda é o coração da ocorrência
     if (!data.description) {
       return { statusCode: 400, body: JSON.stringify({ error: 'O campo "description" é obrigatório.' }) };
     }
 
+    // Agora o objeto newOccurrence pega os dados do seu JSON ou usa um padrão
     const newOccurrence = {
-      date: new Date().toISOString().split('T')[0],
+      // Se você enviar "date", ele usa. Senão, gera a data de hoje.
+      date: data.date || new Date().toISOString().split('T')[0], 
+      
       saleId: data.saleId || 'N/D',
       description: data.description,
       category: data.category || 'SLA',
-      status: 'Aberta',
-      externa: data.externa || false,
-      detectionArea: 'Sistema Automático',
-      originArea: 'Expedição',
-      salesperson: 'N/D',
-      immediateAction: 'Registo automático por violação de SLA.',
-      actionDescription: '',
+      status: data.status || 'Aberta',
+      externa: data.externa !== undefined ? data.externa : false,
+      
+      // Campos que agora são flexíveis:
+      detectionArea: data.detectionArea || 'Sistema Automático',
+      originArea: data.originArea || 'Expedição',
+      salesperson: data.salesperson || 'N/D',
+      immediateAction: data.immediateAction || 'Registo automático por violação de SLA.',
+      actionDescription: data.actionDescription || '',
     };
 
     const docRef = await db.collection('occurrences').add(newOccurrence);
@@ -52,7 +53,7 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 201,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, id: docRef.id }),
+      body: JSON.stringify({ success: true, id: docRef.id, data: newOccurrence }),
     };
   } catch (error) {
     console.error('Erro ao criar ocorrência:', error);
