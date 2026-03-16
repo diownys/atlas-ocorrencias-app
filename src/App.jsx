@@ -685,16 +685,19 @@ const OccurrencesPage = ({ occurrences, onOpenNewModal, onOpenEditModal, onDelet
     const filteredOccurrences = occurrences.filter(o => {
         const { status, searchTerm, startDate, endDate } = filters;
         if (status !== 'Todos' && o.status !== status) return false;
-        if (searchTerm && !o.saleId.toLowerCase().includes(searchTerm.toLowerCase()) && !o.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        if (searchTerm) {
+            const saleId = String(o.saleId || "").toLowerCase();
+            const description = String(o.description || "").toLowerCase();
+            const term = searchTerm.toLowerCase();
+            if (!saleId.includes(term) && !description.includes(term)) {
+                return false;
+            }
+        }
         if (startDate && o.date < startDate) return false;
         if (endDate && o.date > endDate) return false;
+        
         return true;
     });
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [filters]);
-    
     const handleExportXLS = () => {
         if (typeof XLSX === 'undefined') {
             alert("A biblioteca de exportação ainda não carregou. Tente novamente em alguns segundos.");
